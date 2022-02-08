@@ -34,7 +34,7 @@ rownames(meta.data) = meta.data$CellName
 
 seurat_obj = CreateSeuratObject(counts = exp.table, meta.data = meta.data)
 
-saveRDS(seurat_obj, file = "GSE120575_data_seurat.RDS")
+saveRDS(seurat_obj, file = "data_input/GSE120575_data_seurat.RDS")
 
 seurat_obj = readRDS(file = "data_input/GSE120575_data_seurat.RDS")
 
@@ -68,13 +68,32 @@ seurat_subset = subset(seurat_obj, subset = CellName %in% pretreatment)
 
 ### Option 2
 patients = c("Pre_P1", "Pre_P2", "Pre_P3", "Pre_P4", 
-             "Pre_P6", "Pre_P7", "Pre_P8", "Pre_P24")
+             "Pre_P6", "Pre_P8", "Pre_P24", "Pre_P35")
 
 seurat_subset = subset(seurat_obj, subset = PatientID %in% patients)
 
-write.table(seurat_subset@meta.data, file = here('metadata_subset.tsv'), 
-            sep = "\t", col.names = NA, row.names = TRUE, quote = FALSE)
 
-write.table(as.matrix(GetAssayData(object = seurat_subset, slot = "counts")), 
-            file = here("expressions_matrix_subset.tsv"),
-            sep = "\t", col.names = NA, row.names = TRUE, quote = FALSE)
+seurat_subset <- NormalizeData(seurat_subset, normalization.method = "LogNormalize", 
+                               scale.factor = 10000)
+
+# hpca.se <- HumanPrimaryCellAtlasData()
+pred.labels<- SingleR(test = as.SingleCellExperiment(seurat_subset), 
+                      ref = hpca.se, assay.type.test=1,
+                      labels = hpca.se$label.main)
+
+pred.labels$anna_labels = pred.labels$pruned.labels
+pred.labels$anna_labels[pred.labels$anna_labels %in% c("Macrophage", "Monocyte")] = 
+    "Macro/Mono"
+
+pred.labels$anna_labels[! pred.labels$anna_labels %in% 
+                            c("Macro/Mono", "B_cell", "NK_cell", "T_cells")] = "Other"
+
+seurat_subset[["CellType"]] = pred.labels$anna_labels
+
+write.table(GetAssayData(seurat_subset, 'count'), 
+            file = "data_input/expression_data_normalized.tsv",
+            quote = FALSE, col.names = NA, row.names = TRUE, sep = "\t")
+
+write.table(seurat_subset@meta.data, file = "data_input/metadata_subset.tsv",
+            quote = FALSE, col.names = NA, row.names = TRUE, sep = "\t")
+
